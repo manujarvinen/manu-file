@@ -24,6 +24,8 @@ How the file is laid out:
 
 Consecutive image blocks with different `align` values (left, centre, right) share one line when their widths fit the column (`layoutRows`); they remain separate blocks.
 
+Undo/redo is recorded automatically inside `render()` (`histRecord`): any change to the Markdown, assets or fonts that reaches a render becomes a step, so new features need no snapshot calls — just mutate `S` and render. View, zoom and scroll are deliberately not recorded.
+
 What the app does: block-based Markdown editing, drag reordering, image placement and optimisation, measured A4 pagination shared by the canvas preview and a hand-written true-text PDF exporter, self-serialising save (`.manu` / `.html`), and zip / Markdown / image import and export.
 
 ## Principles

@@ -468,9 +468,15 @@ function svgFix(u){
   SVGFIX.set(u,out);
   return out;
 }
+var IMG_MIN_W=20,IMG_MAX_W=170;          /* mm */
+function clampImgW(w){
+  w=parseFloat(w);
+  return isFinite(w)&&w>0?Math.min(IMG_MAX_W,Math.max(IMG_MIN_W,w)):0;
+}
 function imgHtml(alt,src,at){
   var st="",fit=at.fit||"cover";
-  if(at.w)st+="width:"+parseFloat(at.w)+"mm;";
+  /* a picture is never drawn narrower than the minimum, whatever the source says */
+  if(at.w)st+="width:"+Math.max(IMG_MIN_W,parseFloat(at.w)||IMG_MIN_W)+"mm;";
   if(at.h)st+="height:"+parseFloat(at.h)+"mm;";
   var al=(at.align||"").toLowerCase();
   if(al==="left")st+="margin-left:0;margin-right:auto;";
@@ -589,6 +595,7 @@ function syncStore(){
 }
 function render(){
   S.blocks=splitBlocks(S.md);
+  histRecord();
   syncStore();
   var sheet=$("#sheet");
   sheet.innerHTML=blocksHtml()+'<div id="ghost">&para; &nbsp;Tap to write</div>';
@@ -762,7 +769,6 @@ function blockTextNodes(blk){
 function deleteTextSelection(){
   var s=window.getSelection();
   if(!s||!s.rangeCount||s.isCollapsed)return false;
-  snapshot();
   var rng=s.getRangeAt(0),sheet=$("#sheet");
   var blks=[].slice.call(sheet.querySelectorAll(".blk")).filter(function(b){
     try{return rng.intersectsNode(b)}catch(e){return false}
@@ -798,7 +804,7 @@ function deleteTextSelection(){
     if(!out.trim())S.blocks.splice(e.i,1);else S.blocks[e.i]=out;
     changed=true;
   }
-  if(!changed){undoStack.pop();return false}
+  if(!changed)return false;
   sel=null;
   try{window.getSelection().removeAllRanges()}catch(e){}
   S.md=S.blocks.join("\n\n");S.dirty=true;render();
@@ -840,25 +846,67 @@ function toast(msg,action){
   t.classList.add("on");
   toastT=setTimeout(hideToast,7000);
 }
-var undoStack=[];
-function snapshot(){
-  undoStack.push({md:S.md,assets:Object.assign({},S.assets)});
-  if(undoStack.length>40)undoStack.shift();
+/* ---------- undo / redo ----------
+   Every change to the document ends in render(), so that is where history is
+   kept: whenever the document there differs from the last recorded state, the
+   new state becomes a step. Nothing has to remember to take a snapshot, and
+   text edits, pictures (added, replaced, resized, cropped, aligned, optimized),
+   block moves and deletions, inserted breaks, source edits, fonts, opening a
+   file and clearing are all covered alike. View, zoom and scroll are not part
+   of the document and are never recorded. */
+var HIST={list:[],at:-1,max:120,busy:false},tfClose=null;
+function histState(){
+  return {md:S.md,assets:Object.assign({},S.assets),body:S.settings.body,heading:S.settings.heading};
 }
-function undo(){
-  var s=undoStack.pop();
-  if(!s)return false;
-  hideToast();
-  S.md=s.md;S.assets=s.assets;S.blocks=splitBlocks(S.md);
-  sel=null;S.dirty=true;render();
+function histSame(a,b){
+  if(a.md!==b.md||a.body!==b.body||a.heading!==b.heading)return false;
+  var ka=Object.keys(a.assets),kb=Object.keys(b.assets);
+  if(ka.length!==kb.length)return false;
+  for(var i=0;i<ka.length;i++)if(a.assets[ka[i]]!==b.assets[ka[i]])return false;
   return true;
 }
+function histRecord(){
+  if(HIST.busy)return;
+  var now=histState(),cur=HIST.list[HIST.at];
+  if(cur&&histSame(cur,now))return;
+  HIST.list.length=HIST.at+1;            /* a new change drops whatever could be redone */
+  HIST.list.push(now);
+  if(HIST.list.length>HIST.max)HIST.list.shift();
+  HIST.at=HIST.list.length-1;
+}
+function canUndo(){return HIST.at>0}
+function canRedo(){return HIST.at<HIST.list.length-1}
+function histGo(d){
+  /* an open crop is unfinished work: stepping back first lets go of it */
+  if(tfClose){tfClose();if(d<0)return true}
+  commitOpen();
+  var to=HIST.at+d;
+  if(to<0||to>=HIST.list.length)return false;
+  var st=HIST.list[to];HIST.at=to;
+  hideToast();closePop();
+  S.md=st.md;S.assets=Object.assign({},st.assets);
+  S.settings.body=st.body;S.settings.heading=st.heading;
+  S.blocks=splitBlocks(S.md);
+  sel=null;S.dirty=true;
+  HIST.busy=true;
+  try{applyFonts();render()}finally{HIST.busy=false}
+  return true;
+}
+function undo(){return histGo(-1)}
+function redo(){return histGo(1)}
 document.addEventListener("keydown",function(e){
-  if(editing)return;
-  if((e.ctrlKey||e.metaKey)&&(e.key==="z"||e.key==="Z")){e.preventDefault();undo()}
+  if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
+  var k=(e.key||"").toLowerCase();
+  if(k!=="z"&&k!=="y")return;
+  /* text fields keep their own undo while they are being typed in */
+  var t=e.target;
+  if(editing||(t&&t.closest&&t.closest("input,textarea,select,[contenteditable]")))return;
+  e.preventDefault();
+  if(k==="y"||e.shiftKey){if(!redo())toast("Nothing to redo")}
+  else if(!undo())toast("Nothing to undo");
 });
 function removeBlock(i){
-  commitOpen();snapshot();
+  commitOpen();
   S.blocks.splice(i,1);
   sel=null;
   S.md=S.blocks.join("\n\n");S.dirty=true;render();
@@ -879,7 +927,7 @@ function clearDoc(){
     "<div class='row'><button data-a='x'>Cancel</button><button class='primary' data-a='go'>Clear</button></div>",
     function(a){
       if(a!=="go")return;
-      commitOpen();snapshot();
+      commitOpen();
       S.md="";S.blocks=[];S.assets={};sel=null;S.dirty=true;
       PV.L=null;PV.key=null;
       render();
@@ -1934,7 +1982,8 @@ function openMenu(){
     it("open","Open&hellip;")+
     sep+
     (ed
-      ? (undoStack.length?it("undo","Undo<kbd>"+(MAC?"\u2318Z":"Ctrl+Z")+"</kbd>"):"")+
+      ? (canUndo()?it("undo","Undo<kbd>"+(MAC?"\u2318Z":"Ctrl+Z")+"</kbd>"):"")+
+        (canRedo()?it("redo","Redo<kbd>"+(MAC?"\u21e7\u2318Z":"Ctrl+Shift+Z")+"</kbd>"):"")+
         it("img","Add image&hellip;")+
         "<h5 style='margin-top:10px'>Insert</h5>"+
         it("ins-break","Page break")+it("ins-spacer","Spacer")+it("ins-line","Line")+
@@ -1972,6 +2021,7 @@ function openMenu(){
     if(a==="view"){if(full)exitFull();else setView(S.settings.view==="pages"?"digital":"pages")}
     if(a==="save")saveFile();
     if(a==="undo")undo();
+    if(a==="redo")redo();
     if(a==="img"){pendingImgTarget=null;$("#fileImg").click()}
     if(a==="ins-break")insertStructural("\\pagebreak");
     if(a==="ins-spacer")insertStructural("\\spacer 15mm");
@@ -2058,8 +2108,9 @@ function imagePop(el){
   var al=(at.align||"center").toLowerCase();
   var p=showPop(
     "<h5>"+(name||"image")+"</h5>"+
-    "<div class='row'>Width <input type='number' id='imw' min='10' max='170' value='"+(parseFloat(at.w)||"")+"'> mm "+
+    "<div class='row'>Width <input type='number' id='imw' min='"+IMG_MIN_W+"' max='"+IMG_MAX_W+"' step='1' placeholder='auto' value='"+(parseFloat(at.w)||"")+"'> mm "+
     "<button id='imapply'>Apply</button></div>"+
+    "<div class='hint'>"+IMG_MIN_W+"&ndash;"+IMG_MAX_W+" mm. Leave empty for full width.</div>"+
     "<h5>Align</h5>"+
     "<div class='row'>"+
     "<button data-al='left' aria-pressed='"+(al==="left")+"'>Left</button>"+
@@ -2068,8 +2119,18 @@ function imagePop(el){
     "<div class='row'>"+
     (has?"<button id='imtf'>Crop</button>":"<button id='imadd'>Add image&hellip;</button>")+
     (has?"<button id='imdl'>Download</button><button id='imswap'>Replace&hellip;</button>":"")+
-    "<button class='danger' id='imrm'>Remove</button></div>",
+    "<button class='danger' id='imrm'>Remove</button></div>"+
+    (Object.keys(at).length
+      ?"<div class='sep'></div><button class='menuitem' id='imreset'>Reset image</button>"+
+       "<div class='hint'>Back to full width, uncropped and centered.</div>"
+      :""),
     r.left,r.bottom+6);
+  var rs=p.querySelector("#imreset");
+  if(rs)rs.onclick=function(){
+    closePop();
+    updateImgMd(i,name,function(head){return head});
+    toast("Image reset",undo);
+  };
   [].slice.call(p.querySelectorAll("[data-al]")).forEach(function(btn){
     btn.onclick=function(){
       var v=btn.dataset.al;
@@ -2082,11 +2143,25 @@ function imagePop(el){
   });
   var tf=p.querySelector("#imtf");
   if(tf)tf.onclick=function(){closePop();startTransform(el,name,i,at)};
-  p.querySelector("#imapply").onclick=function(){
-    var w=p.querySelector("#imw").value;
-    updateImgMd(i,name,function(head,a){if(w)a.w=w+"mm";else delete a.w;return head+attrsToStr(a)});
+  function applyWidth(){
+    var raw=p.querySelector("#imw").value.trim(),w=clampImgW(raw);
     closePop();
-  };
+    updateImgMd(i,name,function(head,a){
+      if(w){
+        /* a cropped picture keeps its shape when only the width is typed */
+        var ow=parseFloat(a.w),oh=parseFloat(a.h);
+        if(ow>0&&oh>0)a.h=Math.round(oh*w/ow*10)/10+"mm";
+        a.w=Math.round(w*10)/10+"mm";
+      }else{delete a.w;delete a.h}
+      return head+attrsToStr(a);
+    });
+    if(raw&&w&&Math.abs(w-parseFloat(raw))>.01)
+      toast("Width set to "+w+" mm \u00b7 pictures can be "+IMG_MIN_W+"\u2013"+IMG_MAX_W+" mm wide");
+  }
+  p.querySelector("#imapply").onclick=applyWidth;
+  p.querySelector("#imw").addEventListener("keydown",function(e){
+    if(e.key==="Enter"){e.preventDefault();e.stopPropagation();applyWidth()}
+  });
   var add=p.querySelector("#imadd"),dl=p.querySelector("#imdl"),sw=p.querySelector("#imswap");
   if(add)add.onclick=function(){pendingImgTarget=el;$("#fileImg").click();closePop()};
   if(sw)sw.onclick=function(){pendingImgTarget=el;$("#fileImg").click();closePop()};
@@ -2133,7 +2208,7 @@ function startTransform(el,name,i,at){
   var zo=document.createElement("button");zo.className="z";zo.textContent="−";zo.title="Zoom out";
   var slider=document.createElement("input");slider.type="range";slider.className="tf-zoom";slider.min="1";slider.max="8";slider.step="0.01";slider.value=z;slider.title="Image zoom";
   var zi=document.createElement("button");zi.className="z";zi.textContent="+";zi.title="Zoom in";
-  var reset=document.createElement("button");reset.className="secondary";reset.textContent="Reset";
+  var reset=document.createElement("button");reset.className="secondary";reset.textContent="Reset crop";reset.title="Show the whole picture again, in its original shape";
   var cancel=document.createElement("button");cancel.className="secondary";cancel.textContent="Cancel";
   var done=document.createElement("button");done.textContent="Done";
   [ratio,zo,slider,zi,reset,cancel,done].forEach(function(n){bar.appendChild(n)});el.appendChild(bar);
@@ -2142,8 +2217,8 @@ function startTransform(el,name,i,at){
     var rr=ratios[key]||0;
     if(rr){
       if(w>170){w=170;h=w/rr}if(h>240){h=240;w=h*rr}
-      if(w<15){w=15;h=w/rr}if(h<10){h=10;w=h*rr}
-    }else{w=Math.min(170,Math.max(15,w));h=Math.min(240,Math.max(10,h))}
+      if(w<IMG_MIN_W){w=IMG_MIN_W;h=w/rr}if(h<10){h=10;w=h*rr}
+    }else{w=Math.min(170,Math.max(IMG_MIN_W,w));h=Math.min(240,Math.max(10,h))}
     return [w,h];
   }
   function paint(){
@@ -2206,7 +2281,9 @@ function startTransform(el,name,i,at){
   });
   function endPt(e){pts.delete(e.pointerId);if(pts.size<2)pinch=null;drag=null}
   el.addEventListener("pointerup",endPt);el.addEventListener("pointercancel",endPt);
+  tfClose=function(){closeTransform(false)};
   function closeTransform(save){
+    tfClose=null;
     document.removeEventListener("keydown",keyHandler,true);
     if(!save){render();return}
     updateImgMd(i,name,function(head,a){
@@ -2403,7 +2480,6 @@ function measureTiers(list,base){
   });
 }
 function applyOptimize(list,tier){
-  snapshot();
   var before=0,after=0,flat=[],chain=Promise.resolve();
   list.forEach(function(it){
     before+=it.orig;
