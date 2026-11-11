@@ -8,9 +8,9 @@ The project is at an early stage. Direction and structure are still open; treat 
 
 `manu.html` (~600 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
 
-`ref/initial_reference.html` (~900 KB, a browser "save page" copy of gearnoodle.org/manu.manu) is the original it was derived from, kept untouched for comparison.
+It was derived from a browser "save page" copy of gearnoodle.org/manu.manu, which is no longer kept in the repo (it remains in git history).
 
-Most of either file is base64 assets and fonts — search or slice rather than reading it whole.
+Most of the file is base64 assets and fonts — search or slice rather than reading it whole.
 
 The UI chrome is a small accent-coloured island fixed top-left (`#island`): a fullscreen-preview button and a menu button that holds every other command. There is no top bar.
 
@@ -38,4 +38,3 @@ What the app does: block-based Markdown editing, drag reordering, image placemen
 
 - No build system, tests or tooling exist yet; introduce them only when they are needed, and keep any build output a single file.
 - Verify changes in a real browser: edit, save, reopen, and check the PDF export.
-- Treat `ref/` as a read-only reference; new work goes elsewhere in the repo.
