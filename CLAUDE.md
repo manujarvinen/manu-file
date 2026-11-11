@@ -6,7 +6,7 @@ The project is at an early stage. Direction and structure are still open; treat 
 
 ## Files
 
-`manu.html` (~600 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
+`manu-format.html` (~330 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
 
 It was derived from a browser "save page" copy of gearnoodle.org/manu.manu, which is no longer kept in the repo (it remains in git history).
 
