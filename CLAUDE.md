@@ -22,6 +22,8 @@ How the file is laid out:
 - `#manu-fonts` — JSON of compressed embedded fonts.
 - `#manu-style`, `#manu-app` — the CSS and the editor (~90 KB of plain ES5-style JS in one IIFE, no dependencies).
 
+Consecutive image blocks with different `align` values (left, centre, right) share one line when their widths fit the column (`layoutRows`); they remain separate blocks.
+
 What the app does: block-based Markdown editing, drag reordering, image placement and optimisation, measured A4 pagination shared by the canvas preview and a hand-written true-text PDF exporter, self-serialising save (`.manu` / `.html`), and zip / Markdown / image import and export.
 
 ## Principles

@@ -163,6 +163,9 @@ body[data-view="pages"] .blk.pbreak{display:none}
 #sheet a{color:inherit;text-decoration:underline;text-decoration-color:#b9b4a6}
 #sheet .img{display:block;max-width:100%;margin:.8em auto;position:relative;overflow:hidden}
 #sheet .img img{display:block;width:100%;height:100%;object-fit:cover;image-rendering:auto}
+/* neighbouring pictures that fit on one line share it (see layoutRows) */
+.blk.inrow{display:inline-block;vertical-align:middle}
+.blk.inrow .img{max-width:none}
 #sheet .img>canvas.hq-img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;z-index:1}
 #sheet .img.hq-ready>img{opacity:0}
 #sheet .img.transforming{outline:2px solid var(--accent);outline-offset:2px;cursor:grab;
@@ -530,6 +533,46 @@ function blocksHtml(){
   }
   return h;
 }
+/* Consecutive picture blocks with different alignments (left, centre, right)
+   sit side by side whenever their widths fit the column together. They stay
+   separate blocks - each is only turned into an inline box and nudged to the
+   place its alignment asks for - so editing, selecting and reordering are
+   untouched. Runs on blocks that are still direct children of the sheet. */
+var rowSeq=0;
+function layoutRows(sheet){
+  var blks=[].slice.call(sheet.querySelectorAll(":scope>.blk"));
+  function alignOf(b){
+    var im=b.querySelector(".img"),a="";
+    try{a=String(JSON.parse(im.getAttribute("data-at")||"{}").align||"").toLowerCase()}catch(e){}
+    return a==="left"||a==="right"?a:"center";
+  }
+  function flush(g,W){
+    if(g.length<2)return;
+    var by={},id="r"+(++rowSeq),nat=0;
+    g.forEach(function(it){by[it.a]=it});
+    var lw=by.left?by.left.w:0,rw=by.right?by.right.w:0;
+    g.forEach(function(it){
+      var x=it.a==="left"?0:it.a==="right"?W-it.w:(W-it.w)/2;
+      /* a centred picture that would touch a neighbour takes the middle of the gap instead */
+      if(it.a==="center"&&(x<lw||x+it.w>W-rw))x=lw+(W-lw-rw-it.w)/2;
+      it.b.classList.add("inrow");it.b.dataset.row=id;
+      it.b.style.width=(it.w/W*100)+"%";
+      it.b.style.left=((x-nat)/W*100)+"%";
+      nat+=it.w;
+    });
+  }
+  var g=[],sum=0,W=0;
+  blks.forEach(function(b){
+    var im=b.classList.contains("imgblk")?b.querySelector(".img"):null;
+    var w=im?im.getBoundingClientRect().width:0,bw=b.getBoundingClientRect().width;
+    if(!im||w<1||bw<1){flush(g,W);g=[];sum=0;return}
+    var a=alignOf(b);
+    if(g.length&&(sum+w>W+.5||g.some(function(it){return it.a===a}))){flush(g,W);g=[];sum=0}
+    if(!g.length)W=bw;
+    g.push({b:b,w:w,a:a});sum+=w;
+  });
+  flush(g,W);
+}
 var storeSig="";
 function syncStore(){
   var src=$('script[type="text/manu"]');
@@ -550,6 +593,7 @@ function render(){
   var sheet=$("#sheet");
   sheet.innerHTML=blocksHtml()+'<div id="ghost">&para; &nbsp;Tap to write</div>';
   var pages=1;
+  layoutRows(sheet);
   if(S.settings.view==="pages")pages=paginate(sheet);
   var t=(S.md.match(/^#\s+(.+)$/m)||[])[1];
   document.title=t?t+" \u2014 .manu":".manu";
@@ -577,10 +621,16 @@ function paginate(sheet){
     if(b.classList.contains("pbreak")&&pg.childElementCount)pg=newPage(true);
     pg.appendChild(b);
   });
+  /* a row of pictures moves to the next page as one piece */
+  function tail(p){
+    var el=p.lastElementChild,out=[el],row=el.dataset.row;
+    if(row)while((el=el.previousElementSibling)&&el.dataset.row===row)out.push(el);
+    return out;
+  }
   var i=0,guard=0;
   while(i<pages.length&&guard++<500){
-    var p=pages[i];
-    while(p.scrollHeight>p.clientHeight+1&&p.querySelectorAll(":scope>.blk").length>1){
+    var p=pages[i],t;
+    while(p.scrollHeight>p.clientHeight+1&&p.querySelectorAll(":scope>.blk").length>(t=tail(p)).length){
       var next=pages[i+1];
       if(!next||next.dataset.forced==="1"){
         var np=doc.createElement("div");np.className="page";
@@ -588,7 +638,7 @@ function paginate(sheet){
         pages.splice(i+1,0,np);
         next=np;
       }
-      next.insertBefore(p.lastElementChild,next.firstChild);
+      t.forEach(function(el){next.insertBefore(el,next.firstChild)});
     }
     i++;
   }
@@ -1313,6 +1363,7 @@ function buildLayout(){
     doc.documentElement.setAttribute("data-heading",S.settings.heading);
     sheet.innerHTML=blocksHtml();
     return whenImagesReady(doc).then(function(){
+      layoutRows(sheet);
       paginate(sheet);
       var pgs=[].slice.call(sheet.querySelectorAll(".page")).map(function(p){return pageOps(p,win)});
       S.pages=pgs.length||1;
@@ -1650,8 +1701,59 @@ function syncPages(){
     d._pv={whole:false,rs:rs,l:l,t:t,r:rr,b:b};
   });
 }
-function scheduleSync(){clearTimeout(syncT);syncT=setTimeout(syncPages,90)}
-function setZoom(z,ax,ay){
+/* redraw once things settle, but never leave a long glide or zoom undrawn */
+var syncFirst=0;
+function scheduleSync(){
+  var now=Date.now();
+  if(!syncT)syncFirst=now;
+  clearTimeout(syncT);
+  syncT=setTimeout(function(){syncT=null;syncPages()},Math.max(0,Math.min(90,syncFirst+260-now)));
+}
+/* zoom glides to its target instead of jumping; the anchor point stays put */
+var ZA={raf:0,target:1,ax:null,ay:null,last:0,done:null};
+function stopZoomAnim(){if(ZA.raf){cancelAnimationFrame(ZA.raf);ZA.raf=0}ZA.done=null}
+function zoomGoal(){return ZA.raf?ZA.target:PV.zoom}
+function calm(){return !!(window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches)}
+function zoomTo(z,ax,ay,done){
+  z=Math.max(.08,Math.min(6,z));
+  stopKin();
+  ZA.target=z;ZA.ax=ax;ZA.ay=ay;ZA.done=done||null;
+  if(calm()){stopZoomAnim();applyZoom(z,ax,ay);if(done)done();return}
+  if(ZA.raf)return;
+  ZA.last=performance.now();
+  ZA.raf=requestAnimationFrame(zoomStep);
+}
+function zoomStep(now){
+  var dt=Math.max(1,Math.min(50,now-ZA.last));ZA.last=now;
+  var a=Math.log(PV.zoom),b=Math.log(ZA.target);
+  var nz=Math.exp(a+(b-a)*(1-Math.exp(-dt/85)));
+  if(Math.abs(nz/ZA.target-1)<.003)nz=ZA.target;
+  applyZoom(nz,ZA.ax,ZA.ay);
+  if(nz===ZA.target){ZA.raf=0;var d=ZA.done;ZA.done=null;if(d)d()}
+  else ZA.raf=requestAnimationFrame(zoomStep);
+}
+/* a released drag keeps gliding and eases to a stop */
+var KIN={raf:0,vx:0,vy:0,x:0,y:0,last:0};
+function stopKin(){if(KIN.raf){cancelAnimationFrame(KIN.raf);KIN.raf=0}}
+function startKin(vx,vy){
+  var sc=$("#pvscroll");if(!sc||calm())return;
+  stopKin();
+  KIN.vx=vx;KIN.vy=vy;KIN.x=sc.scrollLeft;KIN.y=sc.scrollTop;KIN.last=performance.now();
+  KIN.raf=requestAnimationFrame(kinStep);
+}
+function kinStep(now){
+  var sc=$("#pvscroll"),dt=Math.max(1,Math.min(40,now-KIN.last));KIN.last=now;
+  KIN.x+=KIN.vx*dt;KIN.y+=KIN.vy*dt;
+  sc.scrollLeft=KIN.x;sc.scrollTop=KIN.y;
+  /* an edge ends the glide on that axis */
+  if(Math.abs(sc.scrollLeft-KIN.x)>1.5){KIN.x=sc.scrollLeft;KIN.vx=0}
+  if(Math.abs(sc.scrollTop-KIN.y)>1.5){KIN.y=sc.scrollTop;KIN.vy=0}
+  var f=Math.exp(-dt/340);KIN.vx*=f;KIN.vy*=f;
+  if(Math.hypot(KIN.vx,KIN.vy)<.02){KIN.raf=0;return}
+  KIN.raf=requestAnimationFrame(kinStep);
+}
+function setZoom(z,ax,ay){stopZoomAnim();stopKin();applyZoom(z,ax,ay)}
+function applyZoom(z,ax,ay){
   var sc=$("#pvscroll");
   z=Math.max(.08,Math.min(6,z));
   var old=PV.zoom;
@@ -1700,27 +1802,36 @@ function refreshPreview(force){
   }).catch(function(){pdfStat("Could not render")});
 }
 /* zoom controls */
-$("#btnZoomIn").addEventListener("click",function(){PV.fit=false;setZoom(PV.zoom*1.25);zoomLabel()});
-$("#btnZoomOut").addEventListener("click",function(){PV.fit=false;setZoom(PV.zoom/1.25);zoomLabel()});
-$("#btnFit").addEventListener("click",function(){PV.fit=true;setZoom(fitZoom());zoomLabel();
-  var sc=$("#pvscroll");if(sc){sc.scrollTop=0;sc.scrollLeft=0}});
+$("#btnZoomIn").addEventListener("click",function(){PV.fit=false;zoomTo(zoomGoal()*1.25);zoomLabel()});
+$("#btnZoomOut").addEventListener("click",function(){PV.fit=false;zoomTo(zoomGoal()/1.25);zoomLabel()});
+$("#btnFit").addEventListener("click",function(){PV.fit=true;zoomLabel();
+  zoomTo(fitZoom(),null,null,function(){
+    var sc=$("#pvscroll");if(!sc)return;
+    if(sc.scrollTo&&!calm())sc.scrollTo({top:0,left:0,behavior:"smooth"});
+    else{sc.scrollTop=0;sc.scrollLeft=0}
+  });});
 /* wheel: ctrl/cmd zooms, plain wheel pans */
 $("#pvscroll").addEventListener("wheel",function(e){
+  stopKin();
   if(!(e.ctrlKey||e.metaKey))return;
   e.preventDefault();
   var r=$("#pvscroll").getBoundingClientRect();
-  PV.fit=false;setZoom(PV.zoom*(1-e.deltaY*.0022),e.clientX-r.left,e.clientY-r.top);
+  var dy=e.deltaMode===1?e.deltaY*33:e.deltaY;
+  PV.fit=false;zoomTo(zoomGoal()*Math.exp(-Math.max(-300,Math.min(300,dy))*.0022),e.clientX-r.left,e.clientY-r.top);
 },{passive:false});
 /* pinch + drag panning */
 (function(){
-  var sc=$("#pvscroll"),pts=new Map(),pinch=null,pan=null;
+  var sc=$("#pvscroll"),pts=new Map(),pinch=null,pan=null,trail=[];
   sc.addEventListener("pointerdown",function(e){
+    stopKin();
     pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size===2){
       var v=[].slice.call(pts.values());
+      stopZoomAnim();
       pinch={d:Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y),z:PV.zoom};pan=null;
     }else if(pts.size===1&&e.pointerType==="mouse"&&e.button===0){
       pan={x:e.clientX,y:e.clientY,l:sc.scrollLeft,t:sc.scrollTop};
+      trail=[{t:performance.now(),x:e.clientX,y:e.clientY}];
       sc.setPointerCapture&&sc.setPointerCapture(e.pointerId);
     }
   });
@@ -1737,9 +1848,25 @@ $("#pvscroll").addEventListener("wheel",function(e){
     }else if(pan){
       sc.scrollLeft=pan.l-(e.clientX-pan.x);
       sc.scrollTop=pan.t-(e.clientY-pan.y);
+      var now=performance.now();
+      trail.push({t:now,x:e.clientX,y:e.clientY});
+      while(trail.length>2&&now-trail[0].t>110)trail.shift();
     }
   },{passive:false});
-  function up(e){pts.delete(e.pointerId);if(pts.size<2)pinch=null;if(!pts.size)pan=null}
+  function up(e){
+    pts.delete(e.pointerId);if(pts.size<2)pinch=null;
+    if(!pts.size){
+      if(pan&&e.type==="pointerup"&&trail.length>1){
+        var a=trail[0],b=trail[trail.length-1],dt=b.t-a.t;
+        /* only a drag still moving at release carries on */
+        if(dt>8&&performance.now()-b.t<70){
+          var vx=-(b.x-a.x)/dt,vy=-(b.y-a.y)/dt;
+          if(Math.hypot(vx,vy)>.08)startKin(vx,vy);
+        }
+      }
+      pan=null;trail=[];
+    }
+  }
   sc.addEventListener("pointerup",up);
   sc.addEventListener("pointercancel",up);
   sc.addEventListener("scroll",scheduleSync,{passive:true});
@@ -1827,9 +1954,7 @@ function openMenu(){
     it("xzip","Export folder (.zip)")+
     it("xhtml","Save as .html")+
     "<div class='hint'>Only needed if .manu files don&rsquo;t open in a browser. Identical file, familiar extension.</div>"+
-    sep+
-    (ed?it("clear","Clear document"," danger"):"")+
-    it("app","Get the .manu app");
+    (ed?sep+it("clear","Clear document"," danger"):"");
   var p=showPop(html,r.left,r.bottom+6,true);
   p.classList.add("menu");
   function sync(){p.querySelectorAll("button[data-k]").forEach(function(b){
@@ -1860,9 +1985,6 @@ function openMenu(){
     if(a==="xmd")download(fileTitle()+".md",new Blob([S.md],{type:"text/markdown"}));
     if(a==="xzip")exportZip();
     if(a==="xhtml")saveFile("html");
-    if(a==="app")modal("<h3>The .manu app</h3>"+
-      "<p>Working with lots of .manu files? The .manu app is a simplified note-keeping app built on this format &mdash; your notes live as plain .manu files: always printable, always yours, never locked in.</p>"+
-      "<div class='row'><button class='primary' data-a='x'>Close</button></div>");
   });
 }
 $("#btnMenu").addEventListener("click",function(e){openMenu();e.stopPropagation()});
