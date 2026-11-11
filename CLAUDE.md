@@ -36,6 +36,13 @@ What the app does: block-based Markdown editing, drag reordering, image placemen
 - The Markdown source stays readable and recoverable without the app.
 - Document content is untrusted: keep link and HTML sanitising intact.
 
+## Versions
+
+The app's version is the `VERSION` constant in `#manu-app` (next to `aboutModal`); the "About MANU" menu entry shows it. The product name is written MANU in the UI.
+
+- Every commit that changes `manu-format.html` bumps `VERSION` (semver: patch for fixes, minor for features) and is tagged `v<VERSION>`.
+- Keep `VERSION`, the tag and the About MANU dialog in agreement; never tag without bumping.
+
 ## Working here
 
 - No build system, tests or tooling exist yet; introduce them only when they are needed, and keep any build output a single file.
