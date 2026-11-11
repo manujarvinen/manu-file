@@ -4,9 +4,15 @@ A `.manu` file is a single HTML file that is both a document and its own editor:
 
 The project is at an early stage. Direction and structure are still open; treat what follows as the current starting point, not a fixed spec.
 
-## Reference
+## Files
 
-`ref/initial_reference.html` (~900 KB, saved from gearnoodle.org/manu.manu) is the working reference implementation. Most of its size is base64 assets and fonts — search or slice it rather than reading it whole.
+`manu.html` (~600 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
+
+`ref/initial_reference.html` (~900 KB, a browser "save page" copy of gearnoodle.org/manu.manu) is the original it was derived from, kept untouched for comparison.
+
+Most of either file is base64 assets and fonts — search or slice rather than reading it whole.
+
+The UI chrome is a small accent-coloured island fixed top-left (`#island`): a fullscreen-preview button and a menu button that holds every other command. There is no top bar.
 
 How the file is laid out:
 
@@ -22,6 +28,7 @@ What the app does: block-based Markdown editing, drag reordering, image placemen
 
 - One file, no build-time or runtime dependencies, no network. It must keep working when opened from disk.
 - The saved file must always reopen and stay editable — the save/load round trip is the core contract.
+- The in-page stores (`text/manu`, `#manu-assets`, `#manu-settings`) are kept in sync with the live document on every render, so even the browser's own "save page" carries current content. Ctrl+S is intercepted and writes the proper single file.
 - The Markdown source stays readable and recoverable without the app.
 - Document content is untrusted: keep link and HTML sanitising intact.
 

@@ -6,6 +6,6 @@ Open a `.manu` file in any browser, double-click a block to edit its Markdown, a
 
 Sources can also be imported and exported as plain Markdown plus images (zip or drag and drop).
 
-`ref/initial_reference.html` is the reference implementation this repository starts from.
+`manu.html` is the working source; `ref/initial_reference.html` is the original it started from.
 
 Status: early, private work in progress.
