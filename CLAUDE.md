@@ -1,4 +1,4 @@
-# manu-format
+# manu-file
 
 A `.manu` file is a single HTML file that is both a document and its own editor: Markdown content, embedded images and fonts, and the app that edits, paginates and exports it — all in one file that works offline.
 
@@ -6,7 +6,7 @@ The project is at an early stage. Direction and structure are still open; treat 
 
 ## Files
 
-`manu-format.html` (~330 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
+`manu-file.html` (~330 KB) is the working source — the format's app and its welcome document in one file. Edit it directly.
 
 It was derived from a browser "save page" copy of gearnoodle.org/manu.manu, which is no longer kept in the repo (it remains in git history).
 
@@ -40,7 +40,7 @@ What the app does: block-based Markdown editing, drag reordering, image placemen
 
 The app's version is the `VERSION` constant in `#manu-app` (next to `aboutModal`); the "About MANU" menu entry shows it. The product name is written MANU in the UI.
 
-- Every commit that changes `manu-format.html` bumps `VERSION` (semver: patch for fixes, minor for features) and is tagged `v<VERSION>`.
+- Every commit that changes `manu-file.html` bumps `VERSION` (semver: patch for fixes, minor for features) and is tagged `v<VERSION>`.
 - Keep `VERSION`, the tag and the About MANU dialog in agreement; never tag without bumping.
 
 ## Working here

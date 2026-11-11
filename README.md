@@ -1,4 +1,4 @@
-# manu-format
+# manu-file
 
 `.manu` is a document format that is always editable: a single self-contained HTML file that holds both the **content** and its **editor**.
 
@@ -6,6 +6,6 @@ Open a `.manu` file in any browser, double-click a block to edit its Markdown, a
 
 Sources can also be imported and exported as plain Markdown plus images (zip or drag and drop).
 
-`manu-format.html` is the working source.
+`manu-file.html` is the working source.
 
-Status: early, private work in progress.
+Status: early work in progress.

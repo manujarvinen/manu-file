@@ -61,9 +61,6 @@ body{margin:0;background:var(--desk);font-family:var(--sans);color:var(--txt)}
   letter-spacing:.16em;cursor:pointer;user-select:none;-webkit-user-select:none}
 #brand:hover{background:rgba(255,255,255,.2)}
 #brand:focus-visible{outline:2px solid #fff;outline-offset:-2px}
-#brand svg{width:17px;height:17px;flex:0 0 auto;pointer-events:none}
-#brand .mk-t{fill:#fff;stroke:#fff;stroke-width:13;stroke-linejoin:round}
-#brand .mk-m{fill:none;stroke:var(--accent);stroke-width:6.5;stroke-linecap:round;stroke-linejoin:round}
 .ib:hover{background:rgba(255,255,255,.2)}
 .ib:focus-visible{outline:2px solid #fff;outline-offset:-2px}
 .ib svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
@@ -323,7 +320,7 @@ body[data-mode="view"] #ghost{display:none}
 </style>
 </head><body data-view="digital" data-mode="edit" class=""><main id="app">
   <nav id="island" aria-label="Document controls">
-    <button id="brand" aria-label="About MANU" title="About MANU"><svg viewBox="0 0 64 64" aria-hidden="true"><path class="mk-t" d="M10 13H54L32 51Z"></path><path class="mk-m" d="M22.5 31V14.5L32 26L41.5 14.5V31"></path></svg>MANU</button>
+    <button id="brand" aria-label="About MANU" title="About MANU">MANU</button>
     <div class="ibrow">
     <button class="ib" id="btnFull" aria-label="Fullscreen preview" title="Fullscreen preview">
       <svg class="ic-full" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></svg>
@@ -2075,7 +2072,7 @@ function modal(html,cb){
 }
 /* The version shown in About MANU. Bump it with every release commit and tag
    that commit v<VERSION> (see CLAUDE.md). */
-var VERSION="0.2.0",HOME="https://github.com/manujarvinen/manu-format";
+var VERSION="0.2.1",HOME="https://github.com/manujarvinen/manu-file";
 function aboutModal(){
   modal("<h3>About MANU</h3>"+
     "<p>Version "+VERSION+"</p>"+
