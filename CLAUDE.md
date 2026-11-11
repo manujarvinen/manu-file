@@ -1,6 +1,6 @@
 # manu-file
 
-A `.manu` file is a single HTML file that is both a document and its own editor: Markdown content, embedded images and fonts, and the app that edits, paginates and exports it — all in one file that works offline.
+A MANU-file is a single HTML file that is both a document and its own editor: Markdown content, embedded images and fonts, and the app that edits, paginates and exports it — all in one file that works offline.
 
 The project is at an early stage. Direction and structure are still open; treat what follows as the current starting point, not a fixed spec.
 
@@ -26,7 +26,7 @@ Consecutive image blocks with different `align` values (left, centre, right) sha
 
 Undo/redo is recorded automatically inside `render()` (`histRecord`): any change to the Markdown, assets or fonts that reaches a render becomes a step, so new features need no snapshot calls — just mutate `S` and render. View, zoom and scroll are deliberately not recorded.
 
-What the app does: block-based Markdown editing, drag reordering, image placement and optimisation, measured A4 pagination shared by the canvas preview and a hand-written true-text PDF exporter, self-serialising save (`.manu` / `.html`), and zip / Markdown / image import and export.
+What the app does: block-based Markdown editing, drag reordering, image placement and optimisation, measured A4 pagination shared by the canvas preview and a hand-written true-text PDF exporter, self-serialising save (as a MANU-file with the `.manu` or `.html` extension), and zip / Markdown / image import and export.
 
 ## Principles
 
