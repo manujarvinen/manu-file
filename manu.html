@@ -998,7 +998,8 @@ document.addEventListener("keydown",function(e){
   if(e.key==="Escape"&&full&&!fsEl()&&!pop&&$("#veil").hidden)exitFull();
 });
 window.addEventListener("resize",function(){
-  if(S.settings.view==="pages"&&PV.fit)setZoom(fitZoom());
+  /* browser zoom arrives here too: it changes the device pixel ratio, so redraw */
+  if(S.settings.view==="pages"){if(PV.fit)setZoom(fitZoom());scheduleSync()}
   else scheduleEditorHQ();
 });
 var pop=null;
@@ -1538,9 +1539,10 @@ function scheduleEditorHQ(root){
   if(host===document)[].slice.call(document.querySelectorAll("#sheet .img:not(.placeholder)")).forEach(scheduleFrameHQ);
   else scheduleFrameHQ(host);
 }
-function drawHQImage(x,im,o,scale){
+function drawHQImage(x,im,o,scale,v){
   var nw=im.naturalWidth||im.width||1,nh=im.naturalHeight||im.height||1;
   var L=Math.max(o.x,o.dx),T=Math.max(o.y,o.dy),R=Math.min(o.x+o.w,o.dx+o.dw),B=Math.min(o.y+o.h,o.dy+o.dh);
+  if(v){L=Math.max(L,v.l);T=Math.max(T,v.t);R=Math.min(R,v.r);B=Math.min(B,v.b)}   /* only the part in view */
   if(R<=L||B<=T||o.dw<=0||o.dh<=0)return;
   var sx=(L-o.dx)/o.dw*nw,sy=(T-o.dy)/o.dh*nh,sw=(R-L)/o.dw*nw,sh=(B-T)/o.dh*nh;
   var tw=Math.max(1,Math.round((R-L)*scale)),th=Math.max(1,Math.round((B-T)*scale));
@@ -1567,11 +1569,13 @@ function preloadImgs(list){
     });
   }));
 }
-function drawPage(cv,page,scale){
-  var w=Math.max(1,Math.round(PW*scale)),h=Math.max(1,Math.round(PH*scale));
+/* v, when given, is a window onto the page (page units l,t,r,b and its size in
+   device pixels pw,ph): only that part is drawn, at whatever scale is asked */
+function drawPage(cv,page,scale,v){
+  var w=v?v.pw:Math.max(1,Math.round(PW*scale)),h=v?v.ph:Math.max(1,Math.round(PH*scale));
   if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}
   var x=smooth2d(cv.getContext("2d"));
-  x.setTransform(scale,0,0,scale,0,0);
+  x.setTransform(scale,0,0,scale,v?-v.l*scale:0,v?-v.t*scale:0);
   x.fillStyle="#fffefa";x.fillRect(0,0,PW,PH);
   page.ops.forEach(function(o){
     if(o.t==="f"){x.fillStyle="rgb("+o.c.join(",")+")";x.fillRect(o.x,o.y,o.w,o.h)}
@@ -1580,12 +1584,13 @@ function drawPage(cv,page,scale){
     else if(o.t==="i"){
       var im=PV.imgs[o.src];if(!im||!im.width)return;
       x.save();x.beginPath();x.rect(o.x,o.y,o.w,o.h);x.clip();
-      drawHQImage(x,im,o,scale);x.restore();
+      drawHQImage(x,im,o,scale,v);x.restore();
     }
   });
   x.textBaseline="alphabetic";
   var cf=null;
   page.text.forEach(function(o){
+    if(v&&(o.y<v.t-o.z||o.y-o.z*1.5>v.b))return;
     var f=cssFontOf(o.f,o.z);
     if(f!==cf){x.font=f;cf=f}
     x.fillStyle="rgb("+o.c.join(",")+")";
@@ -1606,20 +1611,43 @@ function zoomLabel(){
   e.textContent=PV.fit?"Fit":Math.round(PV.zoom*100)+"%";
 }
 var syncT=null;
+/* A page is one canvas while that stays affordable. Zoomed further in - in the
+   preview or with the browser's own zoom - only the part on screen is drawn, at
+   the display's true resolution, so text stays as sharp as it is in the editor. */
+var PV_WHOLE=12e6,PV_WINDOW=20e6;
 function syncPages(){
   var host=$("#pvpages"),sc=$("#pvscroll");if(!host||!sc)return;
   var w=Math.round(PW*PV.zoom),h=Math.round(PH*PV.zoom);
-  var dpr=Math.min(3,window.devicePixelRatio||1);
-  var rs=Math.min(PV.zoom*dpr,4800/PH);
+  var rs=PV.zoom*(window.devicePixelRatio||1);
+  var whole=PW*rs*PH*rs<=PV_WHOLE;
   var box=sc.getBoundingClientRect();
   [].slice.call(host.children).forEach(function(d,i){
     d.style.width=w+"px";d.style.height=h+"px";
-    var r=d.getBoundingClientRect();
-    var near=r.bottom>box.top-500&&r.top<box.bottom+500;
-    var cv=d.firstChild;
-    if(near){
-      if(d.dataset.rs!==String(rs)){drawPage(cv,PV.L.pages[i],rs);d.dataset.rs=String(rs)}
-    }else if(d.dataset.rs){cv.width=cv.height=0;delete d.dataset.rs}
+    var r=d.getBoundingClientRect(),cv=d.firstChild,p=d._pv;
+    if(!(r.bottom>box.top-500&&r.top<box.bottom+500)){
+      if(p){cv.width=cv.height=0;d._pv=null}
+      return;
+    }
+    if(whole){
+      if(!p||!p.whole||p.rs!==rs){cv.style.cssText="";drawPage(cv,PV.L.pages[i],rs);d._pv={whole:true,rs:rs}}
+      return;
+    }
+    var k=r.width/PW;
+    var vl=Math.max(0,(box.left-r.left)/k),vt=Math.max(0,(box.top-r.top)/k),
+        vr=Math.min(PW,(box.right-r.left)/k),vb=Math.min(PH,(box.bottom-r.top)/k);
+    if(vr<=vl||vb<=vt)return;
+    if(p&&!p.whole&&p.rs===rs&&p.l<=vl+.01&&p.t<=vt+.01&&p.r>=vr-.01&&p.b>=vb-.01)return;
+    /* draw a margin around the view so short pans need no redraw */
+    var mx=(vr-vl)*.5,my=(vb-vt)*.5;
+    var l=Math.max(0,vl-mx),t=Math.max(0,vt-my),rr=Math.min(PW,vr+mx),b=Math.min(PH,vb+my);
+    if((rr-l)*(b-t)*rs*rs>PV_WINDOW){l=vl;t=vt;rr=vr;b=vb}
+    l=Math.floor(l*rs)/rs;t=Math.floor(t*rs)/rs;
+    var pw=Math.max(1,Math.ceil((rr-l)*rs)),ph=Math.max(1,Math.ceil((b-t)*rs));
+    rr=l+pw/rs;b=t+ph/rs;
+    cv.style.cssText="position:absolute;left:"+(l/PW*100)+"%;top:"+(t/PH*100)+"%;width:"+
+      ((rr-l)/PW*100)+"%;height:"+((b-t)/PH*100)+"%";
+    drawPage(cv,PV.L.pages[i],rs,{l:l,t:t,r:rr,b:b,pw:pw,ph:ph});
+    d._pv={whole:false,rs:rs,l:l,t:t,r:rr,b:b};
   });
 }
 function scheduleSync(){clearTimeout(syncT);syncT=setTimeout(syncPages,90)}
