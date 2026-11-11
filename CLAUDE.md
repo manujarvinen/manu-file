@@ -12,7 +12,7 @@ It was derived from a browser "save page" copy of gearnoodle.org/manu.manu, whic
 
 Most of the file is base64 assets and fonts — search or slice rather than reading it whole.
 
-The UI chrome is a small accent-coloured island fixed top-left (`#island`): a fullscreen-preview button and a menu button that holds every other command. There is no top bar.
+The UI chrome is a small accent-coloured island fixed top-left (`#island`): the MANU logo on top (click: About MANU), and below it a fullscreen-preview button and a menu button that holds every other command. There is no top bar.
 
 How the file is laid out:
 

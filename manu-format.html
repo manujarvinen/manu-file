@@ -50,19 +50,23 @@ body{margin:0;background:var(--desk);font-family:var(--sans);color:var(--txt)}
 /* ---------- island ---------- */
 :root{--barh:0px}
 #island{position:fixed;z-index:50;top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));
-  display:flex;gap:2px;padding:4px;border-radius:13px;background:var(--accent);
+  display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:13px;background:var(--accent);
   box-shadow:0 2px 6px rgba(0,0,0,.22),0 8px 22px rgba(0,0,0,.2);
   transition:opacity .4s;touch-action:manipulation}
 .ib{appearance:none;border:0;background:transparent;color:#fff;width:36px;height:36px;padding:0;
   border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-#brand{align-self:center;padding:0 7px 0 9px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;
-  letter-spacing:.16em;user-select:none;-webkit-user-select:none;cursor:default}
+.ibrow{display:flex;gap:2px;justify-content:center}
+#brand{appearance:none;border:0;background:transparent;display:flex;align-items:center;justify-content:center;gap:5px;
+  padding:5px 6px 4px;border-radius:9px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;
+  letter-spacing:.16em;cursor:pointer;user-select:none;-webkit-user-select:none}
+#brand:hover{background:rgba(255,255,255,.2)}
+#brand:focus-visible{outline:2px solid #fff;outline-offset:-2px}
+#brand svg{width:17px;height:17px;flex:0 0 auto;pointer-events:none}
+#brand .mk-t{fill:#fff;stroke:#fff;stroke-width:13;stroke-linejoin:round}
+#brand .mk-m{fill:none;stroke:var(--accent);stroke-width:6.5;stroke-linecap:round;stroke-linejoin:round}
 .ib:hover{background:rgba(255,255,255,.2)}
 .ib:focus-visible{outline:2px solid #fff;outline-offset:-2px}
 .ib svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-.ib svg.mark{width:24px;height:24px}
-.ib .mk-t{fill:#fff;stroke:#fff;stroke-width:13}
-.ib .mk-m{fill:none;stroke:var(--accent);stroke-width:6}
 .ib .ic-exit,body.full .ib .ic-full{display:none}
 body.full .ib .ic-exit{display:block}
 @media(pointer:coarse){.ib{width:42px;height:42px}}
@@ -319,14 +323,16 @@ body[data-mode="view"] #ghost{display:none}
 </style>
 </head><body data-view="digital" data-mode="edit" class=""><main id="app">
   <nav id="island" aria-label="Document controls">
-    <span id="brand">MANU</span>
+    <button id="brand" aria-label="About MANU" title="About MANU"><svg viewBox="0 0 64 64" aria-hidden="true"><path class="mk-t" d="M10 13H54L32 51Z"></path><path class="mk-m" d="M22.5 31V14.5L32 26L41.5 14.5V31"></path></svg>MANU</button>
+    <div class="ibrow">
     <button class="ib" id="btnFull" aria-label="Fullscreen preview" title="Fullscreen preview">
       <svg class="ic-full" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></svg>
       <svg class="ic-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"></path></svg>
     </button>
     <button class="ib" id="btnMenu" aria-label="Menu" title="Menu" aria-haspopup="true">
-      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><path class="mk-t" d="M10 13H54L32 51Z"></path><path class="mk-m" d="M22.5 31V14.5L32 26L41.5 14.5V31"></path></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16"></path></svg>
     </button>
+    </div>
   </nav>
   <div id="desk">
     <div id="sheetwrap">
@@ -1997,6 +2003,8 @@ function openMenu(){
   function it(a,label,extra){return "<button class='menuitem"+(extra||"")+"' data-a='"+a+"'>"+label+"</button>"}
   var sep="<div class='sep'></div>";
   var html=
+    it("about","About MANU<kbd>v"+VERSION+"</kbd>")+
+    sep+
     it("view",full?"Exit fullscreen":ed?"Preview":"Edit")+
     it("save","Save<kbd>"+(MAC?"\u2318S":"Ctrl+S")+"</kbd>")+
     it("open","Open&hellip;")+
@@ -2021,11 +2029,7 @@ function openMenu(){
     it("xpdf","Export PDF")+
     it("xmd","Export markdown")+
     it("xzip","Export folder (.zip)")+
-    it("xmanu","Save as .manu")+
-    it("xhtml","Save as .html")+
-    "<div class='hint'>The same file either way. Use .html if .manu files don&rsquo;t open in your browser.</div>"+
-    (ed?sep+it("clear","Clear document"," danger"):"")+
-    sep+it("about","About MANU<kbd>v"+VERSION+"</kbd>");
+    (ed?sep+it("clear","Clear document"," danger"):"");
   var p=showPop(html,r.left,r.bottom+6,true);
   p.classList.add("menu");
   function sync(){p.querySelectorAll("button[data-k]").forEach(function(b){
@@ -2056,12 +2060,11 @@ function openMenu(){
     if(a==="xpdf")exportPdf();
     if(a==="xmd")download(fileTitle()+".md",new Blob([S.md],{type:"text/markdown"}));
     if(a==="xzip")exportZip();
-    if(a==="xmanu")saveFile("manu");
-    if(a==="xhtml")saveFile("html");
     if(a==="about")aboutModal();
   });
 }
 $("#btnMenu").addEventListener("click",function(e){openMenu();e.stopPropagation()});
+$("#brand").addEventListener("click",function(){closePop();aboutModal()});
 
 /* ---------- modal ---------- */
 function modal(html,cb){
@@ -2072,7 +2075,7 @@ function modal(html,cb){
 }
 /* The version shown in About MANU. Bump it with every release commit and tag
    that commit v<VERSION> (see CLAUDE.md). */
-var VERSION="0.1.0",HOME="https://github.com/manujarvinen/manu-format";
+var VERSION="0.2.0",HOME="https://github.com/manujarvinen/manu-format";
 function aboutModal(){
   modal("<h3>About MANU</h3>"+
     "<p>Version "+VERSION+"</p>"+
