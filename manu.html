@@ -180,8 +180,10 @@ body[data-view="pages"] .blk.pbreak{display:none}
 .tf-handle{position:absolute;right:7px;bottom:7px;width:26px;height:26px;border-radius:7px;
   background:var(--accent);border:2px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.5);cursor:nwse-resize;touch-action:none;z-index:6}
 .tf-handle::before{content:"";position:absolute;right:5px;bottom:5px;width:9px;height:9px;border-right:2px solid #fff;border-bottom:2px solid #fff}
-.tf-bar{position:absolute;left:10px;right:10px;bottom:10px;z-index:5;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
-  padding:7px;border-radius:12px;background:rgba(35,40,48,.88);box-shadow:0 4px 16px rgba(0,0,0,.42);backdrop-filter:blur(8px)}
+/* the crop controls sit below the picture, never on it (placed by startTransform) */
+.tf-bar{position:absolute;z-index:8;width:max-content;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  padding:7px;border-radius:12px;background:rgba(35,40,48,.94);box-shadow:0 4px 16px rgba(0,0,0,.42);
+  cursor:default;user-select:none;-webkit-user-select:none}
 .tf-bar button,.tf-bar select{appearance:none;border:0;border-radius:999px;background:var(--accent);color:#fff;
   font-family:var(--sans);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
   padding:8px 12px;min-height:34px;cursor:pointer;touch-action:manipulation}
@@ -193,7 +195,7 @@ body[data-view="pages"] .blk.pbreak{display:none}
 .tf-zoom::-webkit-slider-thumb{appearance:none;width:18px;height:18px;margin-top:-7px;border-radius:50%;background:#fff;border:2px solid var(--accent)}
 .tf-zoom::-moz-range-track{height:4px;border-radius:999px;background:rgba(255,255,255,.35)}
 .tf-zoom::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--accent)}
-@media(max-width:620px){.tf-hint{display:none}.tf-bar{left:6px;right:6px;bottom:6px;gap:4px;padding:5px}.tf-bar button,.tf-bar select{min-height:30px;padding:6px 9px}.tf-zoom{min-width:72px}}
+@media(max-width:620px){.tf-hint{display:none}.tf-bar{gap:4px;padding:5px}.tf-bar button,.tf-bar select{min-height:30px;padding:6px 9px}.tf-zoom{min-width:72px}}
 
 #sheet .img.placeholder{border:1.5px dashed #c9c4b4;border-radius:4px;min-height:30mm;
   display:flex;align-items:center;justify-content:center;color:#a09a88;font-family:var(--sans);font-size:10px;
@@ -2211,7 +2213,24 @@ function startTransform(el,name,i,at){
   var reset=document.createElement("button");reset.className="secondary";reset.textContent="Reset crop";reset.title="Show the whole picture again, in its original shape";
   var cancel=document.createElement("button");cancel.className="secondary";cancel.textContent="Cancel";
   var done=document.createElement("button");done.textContent="Done";
-  [ratio,zo,slider,zi,reset,cancel,done].forEach(function(n){bar.appendChild(n)});el.appendChild(bar);
+  [ratio,zo,slider,zi,reset,cancel,done].forEach(function(n){bar.appendChild(n)});
+  /* the bar lives in the block, outside the picture's clipped frame */
+  var host=el.closest(".blk")||el.parentNode;
+  host.appendChild(bar);
+  ["click","dblclick","pointerdown","mousedown","touchstart"].forEach(function(n){
+    bar.addEventListener(n,function(e){e.stopPropagation()});
+  });
+  function placeBar(){
+    var ir=el.getBoundingClientRect(),hr=host.getBoundingClientRect(),sr=$("#sheet").getBoundingClientRect();
+    var lo=Math.max(8,sr.left+6),hi=Math.min(window.innerWidth-8,sr.right-6);
+    bar.style.maxWidth=Math.max(180,hi-lo)+"px";
+    var bw=bar.offsetWidth,left=ir.left+ir.width/2-bw/2;      /* centred under the picture, kept on the sheet */
+    left=Math.max(lo,Math.min(left,hi-bw));
+    bar.style.left=(left-hr.left)+"px";
+    bar.style.top=(ir.bottom-hr.top+12)+"px";
+    /* on a small picture the hint would hide what is being cropped */
+    hint.style.display=(ir.width<300||ir.height<110)?"none":"";
+  }
 
   function clampDims(w,h,key){
     var rr=ratios[key]||0;
@@ -2230,9 +2249,11 @@ function startTransform(el,name,i,at){
       imgEl.style.width="100%";imgEl.style.height="100%";imgEl.style.position="";imgEl.style.left="";imgEl.style.top="";
     }
     slider.value=z;el.style.width=wMm+"mm";el.style.height=hMm+"mm";scheduleFrameHQ(el);
+    placeBar();
   }
   function setZoom(nz){z=Math.min(8,Math.max(1,nz));paint()}
   paint();
+  if(bar.scrollIntoView)bar.scrollIntoView({block:"nearest",behavior:"smooth"});
   ratio.addEventListener("change",function(e){
     e.stopPropagation();ratioKey=ratio.value;
     var rr=ratios[ratioKey];if(rr){var d=clampDims(wMm,wMm/rr,ratioKey);wMm=d[0];hMm=d[1]}
